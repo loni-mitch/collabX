@@ -6,9 +6,21 @@ import uuid
 import jwt
 import datetime
 from functools import wraps
-import os
 from werkzeug.utils import secure_filename
 from forms import UploadForm ,SignUpForm
+import logging
+from flask_cors import CORS  # The typical way to import flask-cors
+
+logging.basicConfig(level=logging.INFO)
+
+# To enable logging for flask-cors,
+logging.getLogger('flask_cors').level = logging.DEBUG
+
+# One of the simplest configurations. Exposes all resources matching /api/* to
+# CORS and allows the Content-Type header, which is necessary to POST JSON
+# cross origin.
+CORS(app, resources=r'/api/*')
+
 
 
 
@@ -50,13 +62,13 @@ LOGIN AND REGISTER A USER
 '''
 
 
-@app.route('/login')
+@app.route('/api/login')
 def login():
 	auth = request.authorization
 	if not auth or not auth.username or not auth.password:
 		return make_response('Authentication not verified',401,{'WWW-Authenticate':'Basic realm="Login Required!"'})
 	user = User.query.filter_by(name=auth.username).first()
-	if not user:		
+	if not user:
 		return make_response('Authentication not verified',401,{'WWW-Authenticate':'Basic realm="Login Required!"'})
 	if check_password_hash(user.password,auth.password):
 		token = jwt.encode({'public_id':user.public_id,'exp':datetime.datetime.utcnow()+datetime.timedelta(minutes=30)},app.config['SECRET_KEY'])
@@ -80,12 +92,12 @@ PROMOTE A USER TO ADMIN
 
 '''
 
-@app.route('/user/<public_id>',methods=['PUT'])
+@app.route('/api/user/<public_id>',methods=['PUT'])
 @token_required
-def promote_user(current_user,public_id):	
+def promote_user(current_user,public_id):
 	#if not current_user.admin:
 	#	return jsonify({'Message':'You must be an admin to perform this task'})
-	user = User.query.filter_by(public_id=public_id).first()	
+	user = User.query.filter_by(public_id=public_id).first()
 	if not user:
 		return jsonify({'Message':'User does not exist'})
 
@@ -99,7 +111,8 @@ HELPER ROUTES TO SEE DATABASE OBJECTS (USERS, WORKSPACES, CHANNELS)
 
 '''
 
-@app.route('/user',methods=['GET'])
+@app.route('/api/user',methods=['GET'])
+
 def get_users():
 	users =User.query.all()
 	output = []
@@ -110,6 +123,7 @@ def get_users():
 		user_data['password']=user.password
 		user_data['admin']=user.admin
 		output.append(user_data)
+		print(user_data)
 	return jsonify({'users':output})
 
 @app.route('/workspace',methods=['GET'])
@@ -150,7 +164,7 @@ def get_task():
 		task_data['description']=task.description
 		task_data['assignee']=task.assignee
 		task_data['creation_date']=task.creation_date
-		task_data['due_date']=task.due_date	
+		task_data['due_date']=task.due_date
 		task_data['creator']=task.creator
 
 		output.append(task_data)
@@ -163,7 +177,7 @@ CREATE CHANNEL & ADD USER TO CHANNEL
 '''
 
 
-@app.route('/channel', methods=['POST'])
+@app.route('/api/channel', methods=['POST'])
 @token_required
 def create_channel(current_user):
 	if not current_user.admin:
@@ -175,12 +189,12 @@ def create_channel(current_user):
 	db.session.commit()
 	return jsonify({'Message':'Channel was created'})
 
-@app.route('/channel/<public_id>',methods=['PUT'])
+@app.route('/api/channel/<public_id>',methods=['PUT'])
 @token_required
 def add_user_to_channel(current_user,public_id):
 	if not current_user.admin:
 		return jsonify({'Message':'You must be an admin to perform this task'})
-	user = User.query.filter_by(public_id=public_id).first()	
+	user = User.query.filter_by(public_id=public_id).first()
 	if not user:
 		return jsonify({'Message':'User does not exist'})
 
@@ -203,7 +217,7 @@ CREATE WORKSPACE & ADD USER TO WORKSPACE
 
 '''
 
-@app.route('/workspace/<public_id>', methods=['POST','PUT'])
+@app.route('/api/workspace/<public_id>', methods=['POST','PUT'])
 @token_required
 def create_workspace(current_user,public_id):
 	data = request.get_json()
@@ -212,18 +226,18 @@ def create_workspace(current_user,public_id):
 	db.session.commit()
 
 	if request.method == 'PUT':
-		user = User.query.filter_by(public_id=public_id).first()	
+		user = User.query.filter_by(public_id=public_id).first()
 		user.admin=True
 		db.session.commit()
 		return jsonify({'Message':'User is now an admin for this workspace'})
 	return jsonify({'Message':'Workspace was created'})
 
-@app.route('/addworkspace/<public_id>',methods=['PUT'])
+@app.route('/api/addworkspace/<public_id>',methods=['PUT'])
 @token_required
 def add_user_to_workspace(current_user,public_id):
 	if not current_user.admin:
 		return jsonify({'Message':'You must be an admin to perform this task'})
-	user = User.query.filter_by(public_id=public_id).first()	
+	user = User.query.filter_by(public_id=public_id).first()
 	if not user:
 		return jsonify({'Message':'User does not exist'})
 
@@ -243,26 +257,26 @@ CREATE CHANNEL & ADD USER TO CHANNEL
 
 '''
 
-@app.route('/task', methods=['POST'])
+@app.route('/api/task', methods=['POST'])
 @token_required
 def add_task(current_user):
 	if not current_user.admin:
 		return jsonify({'Message':'You must be an admin to perform this task'})
 	data = request.get_json()
-	user = User.query.filter_by(name=data['assignee']).first()	
+	user = User.query.filter_by(name=data['assignee']).first()
 	if not user:
 		return jsonify({'Message':'The assigned user does not exist'})
-	new_task=Task(name=data['name'],description=data['description'],assignee= user.public_id,progress= data['progress'],creation_date=datetime.datetime.utcnow(),due_date= data['due_date'],creator=current_user.id)
+	new_task=Task(name=data['name'],description=data['description'],assignee= user.public_id,progress= data['progress'],creation_date=datetime.datetime.utcnow(),due_date= data['due_date'],task_permission= data['task_permission'],creator=current_user.id)
 	db.session.add(new_task)
 	db.session.commit()
 	return jsonify({'Message':'Task created'})
-	
-@app.route('/task/<public_id>', methods=['PUT'])
+
+@app.route('/api/task/<public_id>', methods=['PUT'])
 @token_required
 def assign_task(current_user,public_id):
 	#if not current_user.admin:
 	#	return jsonify({'Message':'You must be an admin to perform this task'})
-	user = User.query.filter_by(public_id=public_id).first()	
+	user = User.query.filter_by(public_id=public_id).first()
 	if not user:
 		return jsonify({'Message':'User does not exist'})
 	data = request.get_json()
@@ -272,42 +286,62 @@ def assign_task(current_user,public_id):
 
 	new_usertask = UserTasks(user_id = user.id, task_id = task.id)
 	db.session.add(new_usertask)
-	
+
 	db.session.commit()
 	return jsonify({'Message':'The user was assigned a task'})
+
+
+@app.route('/api/task/reassign/<public_id>', methods=['PUT'])
+@token_required
+def reassign_task(current_user,public_id):
+	if not current_user.admin:
+		return jsonify({'Message':'You must be an admin to perform this task'})
+	data = request.get_json()
+	task = Task.query.filter_by(name = data['name']).first()
+	if not task:
+		return jsonify({'Message':'No such task exist'})
+	if task.assignee is None:
+		return jsonify({'Message':'This task was not assigned'})
+	
+	reassign_usertask = UserTasks(user_id = user.id, task_id = task.id)
+	db.session.add(reassign_usertask)
+
+	db.session.commit()
+	return jsonify({'Message':'The user was assigned a task'})
+	
 
 '''
 DELETE USER, WORKSPACE, CHANNEL, TASK
 
 '''
 
-@app.route('/user/<public_id>',methods=['DELETE'])
-def delete_user(public_id):	
-	user = User.query.filter_by(public_id=public_id).first()	
+@app.route('/api/user/<public_id>',methods=['DELETE'])
+def delete_user(public_id):
+	user = User.query.filter_by(public_id=public_id).first()
 	if not user:
 		return jsonify({'Message':'User does not exist'})
 	db.session.delete(user)
 	db.session.commit()
 	return jsonify({'Message':'The user was deleted'})
 
-@app.route('/workspace/<name>',methods=['DELETE'])
+@app.route('/api/workspace/<name>',methods=['DELETE'])
 @token_required
-def delete_workspace(current_user,name):	
+def delete_workspace(current_user,name):
 	if not current_user.admin:
 		return jsonify({'Message':'You must be an admin to perform this task'})
-	workspace = Workspace.query.filter_by(name=name).first()	
+	workspace = Workspace.query.filter_by(name=name).first()
 	if not workspace:
 		return jsonify({'Message':'Workspace does not exist'})
 	db.session.delete(workspace)
 	db.session.commit()
 	return jsonify({'Message':'The Workspace was deleted'})
 
-@app.route('/channel/<name>',methods=['DELETE'])
+@app.route('/api/channel/<name>',methods=['DELETE'])
 @token_required
-def delete_channel(current_user,name):	
+def delete_channel(current_user,name):
 	if not current_user.admin:
 		return jsonify({'Message':'You must be an admin to perform this task'})
-	channel = Channel.query.filter_by(name=name).first()	
+	channel = Channel.query.filter_by(name=name).first()
 	if not channel:
 		return jsonify({'Message':'Channel does not exist'})
 	db.session.delete(channel)
@@ -316,12 +350,12 @@ def delete_channel(current_user,name):
 
 
 
-@app.route('/task/<name>',methods=['DELETE'])
+@app.route('/api/task/<name>',methods=['DELETE'])
 @token_required
 def delete_task(current_user,name):
     if not current_user.admin:
     	return jsonify({'Message':'You must be an admin to perform this task'})
-    	
+
     task=Task.query.filter_by(name=name).first()
     if not task:
     	return jsonify({'Message':'task does not exist'})
@@ -335,40 +369,40 @@ NOTIFICATIONS (UPDATE TASK PROGRESS)
 
 '''
 
-@app.route('/task/progress/<name>', methods=['PUT'])
+@app.route('/api/task/progress/<name>', methods=['PUT'])
 @token_required
-def update_progress(current_user,name):	
+def update_progress(current_user,name):
 	task = Task.query.filter_by(name = name).first()
 	if not task:
 		return jsonify({'Message':'No such task exist'})
-	
+
 	if task.assignee != current_user.public_id and not current_user.admin:
 		return jsonify({'Message':'You are not authorized to perform this task'})
-	
+
 	data = request.get_json()
-	task.progress = data['progress']	
+	task.progress = data['progress']
 	db.session.commit()
 	return jsonify({'Message':'The task progress was updated'})
-	
-@app.route('/task/progress/<name>', methods=['GET'])
-def get_progress(name):	
+
+@app.route('/api/task/progress/<name>', methods=['GET'])
+def get_progress(name):
 	task = Task.query.filter_by(name = name).first()
 	if not task:
 		return jsonify({'Message':'No such task exist'})
-	
+
 	return jsonify({'progress' : task.progress})
-	
-@app.route('/task/progress/<name>', methods=['POST'])
+
+@app.route('/api/task/progress/<name>', methods=['POST'])
 @token_required
-def notify_progress(current_user, name):	
-	user = User.query.filter_by(public_id=current_user.public_id).first()	
+def notify_progress(current_user, name):
+	user = User.query.filter_by(public_id=current_user.public_id).first()
 	if not user:
 		return jsonify({'Message':'User does not exist'})
-		
+
 	task = Task.query.filter_by(name = name).first()
 	if not task:
 		return jsonify({'Message':'No such task exist'})
-		
+
 	new_update = Updates(user = current_user.public_id, task = task.id)
 	db.session.add(new_update)
 	db.session.commit()
@@ -379,7 +413,7 @@ def notify_progress(current_user, name):
 SEND AND GET MESSAGES
 
 '''
-@app.route('/messages', methods = ["POST"])
+@app.route('/api/messages', methods = ["POST"])
 @token_required
 def send_message(current_user):
 	data = request.get_json()
@@ -389,7 +423,7 @@ def send_message(current_user):
 	db.session.commit()
 	return jsonify({'Message':'Message Sent'})
 
-@app.route('/messages', methods = ["GET"])
+@app.route('/api/messages', methods = ["GET"])
 @token_required
 def get_messages(current_user):
 	messages = Message.query.filter_by(reciever=current_user.public_id)
@@ -399,11 +433,11 @@ def get_messages(current_user):
 		message_data['sender'] = message.sender
 		message_data['time_sent'] = message.time_sent
 		message_data['message'] = message.message
-		message_data['receiver'] = message.reciever		
+		message_data['receiver'] = message.reciever
 		output.append(message_data)
 	return jsonify({"messages": output})
 
-	
+
 ######################################   FRONT-END IMPLEMENTATIONS   ####################################################################
 '''
 
@@ -411,7 +445,25 @@ def get_messages(current_user):
 
 '''
 
-@app.route('/upload', methods=['GET','POST'])
+@app.route('/api/task/attach/<name>', methods=['GET','POST'])
+#@token_required
+def attach_files(current_user,name):
+	task = Task.query.filter_by(name = name).first()
+	if not task:
+		return jsonify({'Message':'No such task exist'})
+
+	if task.assignee != current_user.public_id and not current_user.admin:
+		return jsonify({'Message':'You are not authorized to edit this task'})
+	attachForm = AttachForm()
+    # Validate file upload on submit
+	if request.method == 'POST' and attachForm.validate_on_submit():
+		upload = attachForm.upload.data
+		filename = secure_filename(upload.filename)
+		upload.save(os.path.join(app.config['UPLOAD_FOLDER'],filename))
+	return jsonify({'Message':'file attached to task'})
+   
+
+@app.route('/api/upload', methods=['GET','POST'])
 #@token_required
 def upload():
 
@@ -437,7 +489,8 @@ VIEW & DOWNLOAD FILES
 
 '''
 
-@app.route('/files', methods=['GET'])
+
+@app.route('/api/files', methods=['GET'])
 def files():
 	file_list= get_uploaded_files()
 	return render_template('files.html',uploaded_files=file_list)
@@ -456,12 +509,12 @@ def download(filename):
 
 
 
-''' 
+'''
  REGISTER A USER
 '''
 
 
-@app.route('/register', methods=['GET','POST'])
+@app.route('/api/register', methods=['GET','POST'])
 def register():
 	form = SignUpForm()
 	if request.method == "POST":
@@ -498,4 +551,3 @@ def register():
 
 		new_user = User(public_id=str(uuid.uuid4()), name=name,password=hashed_password,admin=False,channel="",workspace=form.workspace.data)
 '''
-

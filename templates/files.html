@@ -1,0 +1,12 @@
+{% extends 'layout.html' %}
+{% block main %}
+
+<div class="fileView">
+	<ul>
+    {% for file in uploaded_files %}
+    <div><li style="color:black; font-size:20px; font-family:Times New Roman;">{{ file }}</li></div>
+    {% endfor %}
+</ul>
+</div>
+
+{% endblock %}

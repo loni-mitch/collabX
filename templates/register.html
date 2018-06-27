@@ -1,0 +1,25 @@
+{% extends 'layout.html' %}
+{% block main %}
+
+<h3>Become a CollabX User Now!</h3>
+<form method="POST">
+	<div class="row uniform">
+		<div class="6u 12u$(xsmall)">
+			<!--<input type="text" name="name" id="name" value="" placeholder="Name" /> -->
+			{{ form.name(class='form-control', placeholder="Enter your name") }}
+
+		</div>
+		<div class="6u$ 12u$(xsmall)">
+			<!--<input type="" name="password" id="password" value="" placeholder="Password" /> -->
+			{{ form.password(class='form-control', placeholder="Enter your password") }}
+		</div>
+		<div class="6u$ 12u$(xsmall)">
+			<!--<input type="" name="password" id="password" value="" placeholder="Password" /> -->
+			{{ form.workspace(class='form-control', placeholder="If you already known your workspace, please enter") }}
+		</div>
+		<div class="6u$ 12u$(xsmall)">
+      		<button type="submit" name="submit">Register</button>
+		</div>
+	</div>
+
+{% endblock %}
